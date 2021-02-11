@@ -1,13 +1,20 @@
+
+//////////---------INCLUDES RELACIONADOS CON LA PANTALLA OLED Y EL KEYPAD-------/////////////////
 #include <Keypad.h>
 #include <SPI.h>
 #include <Wire.h>//Librería necesaria para la comunicación I2C conel chip de la pantalla
 #include <Adafruit_GFX.h>//Librería gráfica para la pantalla OLED
 #include <Adafruit_SSD1306.h>//Librería necesaria para laspantallas OLED
+
+//////////----INCLUDE RTC----/////
+#include "RTClib.h"
+#define rele 12
  
 // Definimos constantes
 #define ANCHO_PANTALLA 128 // ancho pantalla OLED. Valor típico 128
 #define ALTO_PANTALLA 64 // alto pantalla OLED. Valor típico son 64 y 32
 
+////////////////----------Variables keypad y OLED-------////////
 const byte filas =4;
 const byte columnas=4;
 char teclas [filas][columnas] ={
@@ -35,13 +42,43 @@ void opcion_a();
 void opcion_b();
 void opcion_c();
 void error_numerico();
- 
-// Objeto de la clase Adafruit_SSD1306
+
+//////////----Variables RTC y objetos----////
+
+RTC_DS1307 rtc;
+DateTime hoy;
+int bandera_riego=0;
+int bandera_verano=0;
+
+int duracion_riego=10000;
+
+int horariego1=7;
+int horariego2=12;
+int horariego3=18;
+//int horariegoextra=22;
+//int hora_actual;
+int ano,mes,dia,hora,minuto,segundo;
+
+String DiasdelaSemana[7] = { "Domingo", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado" };
+String MesesdelAno[12] = { "Enero", "Febrero", "Marzo", "Abril", "Mayo",  "Junio", "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre" };
+
+//////Configuracion del reloj///////
+//SDA A4 Línea I2C de transmisión de datos
+//SCL A5 Línea I2C de la señal de reloj
+//GND GND 
+//VCC VCC
+//SQW Este pin sirve para obtener una señal cuadrada, como no lo usaremos no lo declaramos
+
+
+///////------ Objeto de la clase Adafruit_SSD1306 y del keypa------////////
+
 Adafruit_SSD1306 display(ANCHO_PANTALLA, ALTO_PANTALLA, &Wire, -1);//&Wire es un puntero de la clase estática Wire. -1 es el pin de Arduino o ESP8266 que se utiliza para resetear la pantalla en caso de que la pantalla tenga un pin RST (no es nuestro caso)
 Keypad teclado = Keypad(makeKeymap(teclas), pinesFilas, pinesColumnas, filas, columnas); ///Crea el mapa del teclado 
  
 void setup() {
 
+  Wire.begin();///Conecta arduino al bus. Si no se especifica dirección, se conecta arduino al bus como maestro.
+  rtc.begin();////Iniciamos el RTC
   bandera_seleccion=0;//Bajamos la bandera de selección
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);//Iniciamos la pantalla OLED que se encuentra en la dirección 0x3C
 
