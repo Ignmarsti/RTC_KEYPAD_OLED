@@ -58,9 +58,17 @@ int horariego3=18;
 //int horariegoextra=22;
 //int hora_actual;
 int ano,mes,dia,hora,minuto,segundo;
+char ano_c[4];
+char mes_c[2];
+char dia_c[2];
+char hora_c[2];
+char min_c[2];
+char seg_c[2];
 
 String DiasdelaSemana[7] = { "Domingo", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado" };
 String MesesdelAno[12] = { "Enero", "Febrero", "Marzo", "Abril", "Mayo",  "Junio", "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre" };
+
+void ajuste_reloj();
 
 //////Configuracion del reloj///////
 //SDA A4 Línea I2C de transmisión de datos
@@ -381,4 +389,88 @@ void error_numerico(){
   display.println("La hora introducida no es valida");
   display.display();
   delay(2000);
+}
+
+
+void ajuste_reloj(){
+  display.clearDisplay();
+  display.setCursor(0,0);
+  display.setTextSize(1);
+  display.println("Por favor, introduzca el año, el mes, el día, y la hora respectivamente")
+  display.display();
+  int j;
+  int k=0;
+  if(k==0){
+    for (j=3;j<0;j--){
+      ano_c = teclado.WaitForKey();
+    if(j=0){
+      k++;
+    }
+  }
+  }
+
+  if(k==1){
+    for(j=2;j<0;j--){
+      mes_c = teclado.WaitForKey();
+    }
+    if(j=0){
+      k++;
+    }
+  }
+  if(k==2){
+    for (j=2;j<0;j--){
+      dia_c = teclado.WaitForKey();
+    if(j=0){
+      k++;
+  }
+  if(k==3){
+    for (j=2;j<0;j--){
+      hora_c = teclado.WaitForKey();
+    if(j=0){
+      k++;
+  }
+  if(k==4){
+    for (j=2;j<0;j--){
+     minuto_c = teclado.WaitForKey();
+    if(j=0){
+      k++;
+  }
+  if(k==5){
+  for (j=2;j<0;j--){
+      segundo_c = teclado.WaitForKey();
+    if(j=0){
+      k++;
+  }
+  if(k==6){
+    rtc.adjust(DateTime(ano_c, mes_c, dia_c, hora_c, minuto_c, segundo_c));
+    recuperar_fecha();
+  }
+  
+
+}
+
+void recuperar_fecha(){
+  hoy = rtc.now
+  ano=hoy.year();
+  mes=hoy.month();
+  dia=hoy.day();
+  hora=hoy.hour();
+  minuto=hoy.minute();
+  segundo=hoy.second();
+  display.clearDisplay();
+  display.setCursor(0,0);
+  display.print("La fecha actual es:");
+  display.write(ano);
+  display.print("/");
+  display.write(mes);
+  display.print("/");
+  display.write(dia);
+  display.print("/");
+  display.write(hora);
+  display.print("/");
+  display.write(minuto);
+  display.print("/");
+  display.write(segundo);
+  display.print("/");
+
 }
