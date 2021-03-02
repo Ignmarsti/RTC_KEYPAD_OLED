@@ -1,20 +1,22 @@
+#include "SDHT.h"
 
-//////////---------INCLUDES RELACIONADOS CON LA PANTALLA OLED Y EL KEYPAD-------/////////////////
+
+
 #include <Keypad.h>
 #include <SPI.h>
-#include <Wire.h>//Librería necesaria para la comunicación I2C conel chip de la pantalla
+#include <Wire.h>//Librería necesaria para la comunicación I2C conel chip de la pantalla(Reloj)
 #include <Adafruit_GFX.h>//Librería gráfica para la pantalla OLED
 #include <Adafruit_SSD1306.h>//Librería necesaria para laspantallas OLED
-
-//////////----INCLUDE RTC----/////
 #include "RTClib.h"
-#define rele 12
- 
+#include "SDHT.h"
+
 // Definimos constantes
 #define ANCHO_PANTALLA 128 // ancho pantalla OLED. Valor típico 128
 #define ALTO_PANTALLA 64 // alto pantalla OLED. Valor típico son 64 y 32
+#define pinsensorT 2////Definimos el puerto donde conectaremos el sensor de temperatura
+#define TipoSensor DHT11/////Definimos el tipo de sensor que es
+#define ldr_pin 16
 
-////////////////----------Variables keypad y OLED-------////////
 const byte filas =4;
 const byte columnas=4;
 char teclas [filas][columnas] ={
@@ -30,66 +32,56 @@ char horariego1[6];
 char horariego2[6];
 char horariego3[6];
 
+byte ano,mes,dia,hora,minuto,segundo;
+char fecha[] = ("  :  :  ");
+char calendario[] = ("  /  /20  ");
+
+//float t;
+unsigned int ldr=0;
+const long A = 1000;     //Resistencia en oscuridad en KΩ
+const int B = 15;        //Resistencia a la luz (10 Lux) en KΩ
+const int Rc = 10;       //Resistencia calibracion en KΩ
+int V;
+int ilum;
+
+
 int i=0;
 int tecla_numerica;
 int tecla_anterior;
 char opcion_seleccionada;
 bool bandera;
-bool bandera_seleccion;
+bool bandera_seleccion=0;
+
 
 void menu_principal();
 void opcion_a();
 void opcion_b();
 void opcion_c();
 void error_numerico();
-
-//////////----Variables RTC y objetos----////
-
-RTC_DS1307 rtc;
-DateTime hoy;
-int bandera_riego=0;
-int bandera_verano=0;
-
-int duracion_riego=10000;
-
-int horariego1=7;
-int horariego2=12;
-int horariego3=18;
-//int horariegoextra=22;
-//int hora_actual;
-int ano,mes,dia,hora,minuto,segundo;
-char ano_c[4];
-char mes_c[2];
-char dia_c[2];
-char hora_c[2];
-char min_c[2];
-char seg_c[2];
-
-String DiasdelaSemana[7] = { "Domingo", "Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado" };
-String MesesdelAno[12] = { "Enero", "Febrero", "Marzo", "Abril", "Mayo",  "Junio", "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre" };
-
-void ajuste_reloj();
-
-//////Configuracion del reloj///////
-//SDA A4 Línea I2C de transmisión de datos
-//SCL A5 Línea I2C de la señal de reloj
-//GND GND 
-//VCC VCC
-//SQW Este pin sirve para obtener una señal cuadrada, como no lo usaremos no lo declaramos
-
-
-///////------ Objeto de la clase Adafruit_SSD1306 y del keypa------////////
-
+void ver_fecha();
+void opcion_sensado();
+void escribir_texto();
+void tecla_no_numerica();
+ 
+// Objeto de la clase Adafruit_SSD1306 y del RTC
 Adafruit_SSD1306 display(ANCHO_PANTALLA, ALTO_PANTALLA, &Wire, -1);//&Wire es un puntero de la clase estática Wire. -1 es el pin de Arduino o ESP8266 que se utiliza para resetear la pantalla en caso de que la pantalla tenga un pin RST (no es nuestro caso)
 Keypad teclado = Keypad(makeKeymap(teclas), pinesFilas, pinesColumnas, filas, columnas); ///Crea el mapa del teclado 
+RTC_DS1307 rtc;
+DateTime hoy;
+SDHT dht;
  
 void setup() {
-
-  Wire.begin();///Conecta arduino al bus. Si no se especifica dirección, se conecta arduino al bus como maestro.
-  rtc.begin();////Iniciamos el RTC
+  
+  
   bandera_seleccion=0;//Bajamos la bandera de selección
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);//Iniciamos la pantalla OLED que se encuentra en la dirección 0x3C
+  Wire.begin();
+  rtc.begin();
+  pinMode(LED_BUILTIN, OUTPUT);
+  
 
+  rtc.adjust(DateTime(__DATE__, __TIME__));///ESTA LINEA SE TIENE QUE COMENTAR NADA MAS SE CARGUE UNA VEZ, Y VOLVER A CARGAR EL SKECTH PARA QUE DE ESTA MANERA SOLO SE PONGA EN HORA UNA VEZ A TRAVÉS DEL ORDENADOR
+  //rtc.adjust(DateTime(2021, 02, 17, 19, 44, 00));
   
   menu_principal();
 
@@ -97,7 +89,14 @@ void setup() {
 }
  
 void loop() {
-
+    
+    dht.read(TipoSensor, pinsensorT);
+    
+    V = analogRead(ldr_pin); 
+    
+    
+    //t = dht.readTemperature();////En grados celsius por defecto
+    hoy = rtc.now();///Recuperamos la fecha actual
     tecla_pulsada = teclado.getKey();//Comprobamos que tecla se ha pulsado
     opcion_seleccionada=tecla_pulsada;//La guardamos en una nueva variable
     //Tenemos varias opciones
@@ -113,6 +112,15 @@ void loop() {
       opcion_c();
       bandera_seleccion=1;
     }
+    if(opcion_seleccionada== 'D'){
+      bandera_seleccion=1;
+      ver_fecha();
+    }
+    if(opcion_seleccionada== '#'){
+      bandera_seleccion=1;
+      opcion_sensado();
+    }
+
 
 
 }
@@ -124,20 +132,17 @@ void opcion_a(){
 
     //Limpiamos el display, situamos el cursor en la posición adecuada e imprimimos por pantalla el mensaje
     display.clearDisplay();
-    display.setCursor(0,0);
-    display.println("Opcion A seleccionada");
-    display.display();
+    escribir_texto(0,0, "Opcion A seleccionada", 1);
+
 
     //Creamos un bucle en el que cada vez que recibimos una tecla, la guardamos en el vector corresponiente
     for(i=0;i<6;i++){
       tecla_pulsada=teclado.waitForKey();////Esta función es importante, ya que hasta que no pulsemos una tecla, el micro se queda parado en está instrucción. La unica manera de avanzar es pulsar una tecla o salir de bucle for
       if(tecla_pulsada=='A'||tecla_pulsada=='B'||tecla_pulsada=='C'||tecla_pulsada=='D'||tecla_pulsada=='*'||tecla_pulsada=='#'){
         display.clearDisplay();
-        display.setCursor(0,0);
-        display.println("ERROR");
-        display.setCursor(0,10);
-        display.println("La tecla pulsada no es numerica");
-        display.display();
+        
+        tecla_no_numerica();
+
         delay(2000);
         bandera_seleccion=0;
         menu_principal();
@@ -172,8 +177,9 @@ void opcion_a(){
         
         if(i==5){//Si ya hemos terminado de meter la hora completa, esta ocupará 6 espacios, por lo que una vez estén rellenos imprimiremos por pantalla lo que tenemos en el vector
           display.clearDisplay();
-          display.setCursor(3,0);  
-          display.println("Se ha programado la hora de riego a las ");
+          
+          escribir_texto(3,0, " Se ha programado la hora de riego a las ", 1);
+          
           display.write(horariego1[0]);
           display.write(horariego1[1]);
           display.print(':');
@@ -200,8 +206,9 @@ void opcion_b(){
 
     //Limpiamos el display, situamos el cursor en la posición adecuada e imprimimos por pantalla el mensaje
     display.clearDisplay();
-    display.setCursor(0,0);
-    display.println("Opcion B seleccionada");
+    
+    escribir_texto(0, 0, "Opcion B seleccionada", 1);
+
     display.display();
 
     //Creamos un bucle en el que cada vez que recibimos una tecla, la guardamos en el vector corresponiente
@@ -209,11 +216,9 @@ void opcion_b(){
       tecla_pulsada=teclado.waitForKey();////Esta función es importante, ya que hasta que no pulsemos una tecla, el micro se queda parado en está instrucción. La unica manera de avanzar es pulsar una tecla o salir de bucle for
       if(tecla_pulsada=='A'||tecla_pulsada=='B'||tecla_pulsada=='C'||tecla_pulsada=='D'||tecla_pulsada=='*'||tecla_pulsada=='#'){
         display.clearDisplay();
-        display.setCursor(0,0);
-        display.println("ERROR");
-        display.setCursor(0,10);
-        display.println("La tecla pulsada no es numerica");
-        display.display();
+        
+        tecla_no_numerica();
+        
         delay(2000);
         menu_principal();
         break;
@@ -247,8 +252,8 @@ void opcion_b(){
       horariego2[i]=tecla_pulsada;
       if(i==5){//Si ya hemos terminado de meter la hora completa, esta ocupará 6 espacios, por lo que una vez estén rellenos imprimiremos por pantalla lo que tenemos en el vector
         display.clearDisplay();
-        display.setCursor(3,0);  
-        display.println("Se ha programado la hora de riego a las ");
+          
+        escribir_texto(0, 0, "Se ha programado la hora de riego a las ", 1);
         display.write(horariego2[0]);
         display.write(horariego2[1]);
         display.print(':');
@@ -277,27 +282,24 @@ void opcion_c(){
 
     //Limpiamos el display, situamos el cursor en la posición adecuada e imprimimos por pantalla el mensaje
     display.clearDisplay();
-    display.setCursor(0,0);
-    display.println("Opcion C seleccionada");
-    display.display();
+    
+    escribir_texto(0, 0, "Opcion C seleccionada", 1);
 
     //Creamos un bucle en el que cada vez que recibimos una tecla, la guardamos en el vector corresponiente
     for(i=0;i<6;i++){
       tecla_pulsada=teclado.waitForKey();////Esta función es importante, ya que hasta que no pulsemos una tecla, el micro se queda parado en está instrucción. La unica manera de avanzar es pulsar una tecla o salir de bucle for
       if(tecla_pulsada=='A'||tecla_pulsada=='B'||tecla_pulsada=='C'||tecla_pulsada=='D'||tecla_pulsada=='*'||tecla_pulsada=='#'){
         display.clearDisplay();
-        display.setCursor(0,0);
-        display.println("ERROR");
-        display.setCursor(0,10);
-        display.println("La tecla pulsada no es numerica");
-        display.display();
+        
+        tecla_no_numerica();
+        
         delay(2000);
         menu_principal();
         break;
       }
       else{
-        horariego1[i]=tecla_pulsada;
-        tecla_numerica=horariego1[i]-48;
+        horariego3[i]=tecla_pulsada;
+        tecla_numerica=horariego3[i]-48;
         if(i==0&&tecla_numerica>2){          
           error_numerico();
           menu_principal();
@@ -322,9 +324,10 @@ void opcion_c(){
           break;
         }
       if(i==5){//Si ya hemos terminado de meter la hora completa, esta ocupará 6 espacios, por lo que una vez estén rellenos imprimiremos por pantalla lo que tenemos en el vector
-        display.clearDisplay();
-        display.setCursor(3,0);  
-        display.println("Se ha programado la hora de riego a las ");
+        display.clearDisplay(); 
+        
+        escribir_texto(0, 0, "Se ha programado la hora de riego a las ", 1);
+        
         display.write(horariego3[0]);
         display.write(horariego3[1]);
         display.print(':');
@@ -350,127 +353,147 @@ void opcion_c(){
 void menu_principal(){
 
   i=0;
+  digitalWrite(LED_BUILTIN, HIGH);   // turn the LED on (HIGH is the voltage level)
+  delay(1000);                       // wait for a second
+  digitalWrite(LED_BUILTIN, LOW);    // turn the LED off by making the voltage LOW
+  delay(1000);
 
     // Limpiar buffer
   display.clearDisplay();
  
-  // Tamaño del texto
-  display.setTextSize(2);
   // Color del texto
   display.setTextColor(SSD1306_WHITE);
-  // Posición del texto
-  display.setCursor(40, 16);
-  
-  // Escribir texto
-  display.println("Menu");
- 
-  // Enviar a pantalla
-  display.display();
 
-  //Seleccionamos el lugar donde pondremos el cursor, imprimimos por pantalla y lo mandamos al display
-  display.setCursor(10,32);
-  display.println("Principal");
-  display.display();
+  //Escribimos el texto en la posición indicada y con el tamaño indicado
+  escribir_texto(40, 16, "Menu", 2);
+  escribir_texto(10, 32, "Principal", 2);
   
   delay(2000);
   
   // Limpiamos la pantalla, cambiamos el tamaño del texto y resituamos el cursor para escribir el nuevo mensaje. Luego lo mandamos
   display.clearDisplay();
-  display.setTextSize(1);
-  display.setCursor(0,0);
-  display.println("Pulse A, B y C para  cambiar las horas de riego 1, 2 y 3 respectivamente");
-  display.display();
+  escribir_texto(0, 0, "Pulse A, B y C para  cambiar las horas de riego 1, 2 y 3 respectivamente", 1);
 }
 
 
 void error_numerico(){
   display.clearDisplay();
-  display.setCursor(0,0);
-  display.println("La hora introducida no es valida");
-  display.display();
+  escribir_texto(0, 0, "La hora introducida no es valida", 1);
   delay(2000);
 }
 
-
-void ajuste_reloj(){
-  display.clearDisplay();
-  display.setCursor(0,0);
-  display.setTextSize(1);
-  display.println("Por favor, introduzca el año, el mes, el día, y la hora respectivamente")
-  display.display();
-  int j;
-  int k=0;
-  if(k==0){
-    for (j=3;j<0;j--){
-      ano_c = teclado.WaitForKey();
-    if(j=0){
-      k++;
-    }
-  }
-  }
-
-  if(k==1){
-    for(j=2;j<0;j--){
-      mes_c = teclado.WaitForKey();
-    }
-    if(j=0){
-      k++;
-    }
-  }
-  if(k==2){
-    for (j=2;j<0;j--){
-      dia_c = teclado.WaitForKey();
-    if(j=0){
-      k++;
-  }
-  if(k==3){
-    for (j=2;j<0;j--){
-      hora_c = teclado.WaitForKey();
-    if(j=0){
-      k++;
-  }
-  if(k==4){
-    for (j=2;j<0;j--){
-     minuto_c = teclado.WaitForKey();
-    if(j=0){
-      k++;
-  }
-  if(k==5){
-  for (j=2;j<0;j--){
-      segundo_c = teclado.WaitForKey();
-    if(j=0){
-      k++;
-  }
-  if(k==6){
-    rtc.adjust(DateTime(ano_c, mes_c, dia_c, hora_c, minuto_c, segundo_c));
-    recuperar_fecha();
-  }
+void ver_fecha(){
   
+  hoy = rtc.now();///Recuperamos la fecha actual
+  
+  ano= hoy.year() % 100;// Eliminamos el siglo y queda el año con dos dígitos
+  
+  mes=hoy.month();
 
+  dia=hoy.day();
+ 
+  hora=hoy.hour();
+  
+  minuto=hoy.minute();
+  
+  segundo=hoy.second();
+  
+  
+  fecha[7] = segundo % 10 + 48;
+  fecha[6] = segundo / 10 + 48;
+  fecha[4] = minuto % 10 + 48;
+  fecha[3] = minuto / 10 + 48;
+  fecha[1] = hora % 10 + 48;
+  fecha[0] = hora / 10 + 48;
+
+  
+  calendario[9] = ano % 10 + 48;
+  calendario[8] = ano / 10 + 48;
+  calendario[4] = mes % 10 + 48;
+  calendario[3] = mes / 10 + 48;
+  calendario[1] = dia % 10 + 48;
+  calendario[0] = dia / 10 + 48;
+
+  
+  display.clearDisplay();
+  escribir_texto(0, 0, fecha, 1);
+  escribir_texto(60, 0, calendario, 1);
+  delay(2000);
+  menu_principal();
 }
 
-void recuperar_fecha(){
-  hoy = rtc.now
-  ano=hoy.year();
-  mes=hoy.month();
-  dia=hoy.day();
-  hora=hoy.hour();
-  minuto=hoy.minute();
-  segundo=hoy.second();
-  display.clearDisplay();
-  display.setCursor(0,0);
-  display.print("La fecha actual es:");
-  display.write(ano);
-  display.print("/");
-  display.write(mes);
-  display.print("/");
-  display.write(dia);
-  display.print("/");
-  display.write(hora);
-  display.print("/");
-  display.write(minuto);
-  display.print("/");
-  display.write(segundo);
-  display.print("/");
+void hora_de_regar(){
+  ///A pesar de que cuando introducimos manualmente la hora de riego se piden la hora, los minutos y los segundos, en esta parte del código nos fijaremos solo en la hora y los minutos
+  ///De esta manera si por casualidad estamos tocando el keypad justo a la hora de riego y nos encontramos con un delay, no perderemos el riego, si no que regaremos una vez pase el delay
+  ///Y levantaremos una bandera para que solo se riegue una sola vez.
+  int horariego1_0 = horariego1[0] - '0';
+  int horariego1_1 = horariego1[1] - '0';
+  int horariego1_3 = horariego1[3] - '0';
+  int horariego1_4 = horariego1[4] - '0';
+  int horariego2_0 = horariego1[0] - '0';
+  int horariego2_1 = horariego1[1] - '0';
+  int horariego2_3 = horariego1[3] - '0';
+  int horariego2_4 = horariego1[4] - '0';
+  int horariego3_0 = horariego1[0] - '0';
+  int horariego3_1 = horariego1[1] - '0';
+  int horariego3_3 = horariego1[3] - '0';
+  int horariego3_4 = horariego1[4] - '0';
+
+  if(horariego1_0==fecha[0]&&horariego1_1==fecha[1]&&horariego1_3==fecha[3]&&horariego1_4==fecha[4]){
+    /////ENCENDEMOS LA BOMBA DURANTE 10 segundos////////
+  }
+  if(horariego2_0==fecha[0]&&horariego2_1==fecha[1]&&horariego2_3==fecha[3]&&horariego2_4==fecha[4]){
+    /////ENCENDEMOS LA BOMBA DURANTE 10 segundos////////
+  }
+  if(horariego3_0==fecha[0]&&horariego3_1==fecha[1]&&horariego3_3==fecha[3]&&horariego3_4==fecha[4]){
+    /////ENCENDEMOS LA BOMBA DURANTE 10 segundos////////
+  }
+  
+  
+}
+void opcion_sensado(){
+  if(bandera_seleccion==1){
+
+      float humedad=dht.humidity;
+      int hum=humedad*10;
+      float temperatura=dht.celsius;
+      int temp=temperatura*10;
+      
+      
+      display.clearDisplay();
+      escribir_texto(0, 0, "La temperatura es:", 1);
+      display.print(temp/100);
+      display.print(",");
+      display.println(temp%100);
+      display.display();
+      
+      escribir_texto(0, 13, "La humedad es:", 1);
+      display.print(hum/100);
+      display.print(",");
+      display.println(hum%100);
+      display.display();
+
+     /* ilum = ((long)V*A*10)/((long)B*Rc*(1024-V));
+      escribir_texto(0, 0, "La cantidad de luz es: ", 1);
+      display.println(ilum);
+      display.display();*/
+      
+      delay(2000);
+      bandera_seleccion=0;
+      menu_principal();
+  }
+}
+
+
+void escribir_texto(byte x_pos, byte y_pos, char *text, byte text_size){
+  display.setCursor(x_pos, y_pos);
+  display.setTextSize(text_size);
+  display.print(text);
+  display.display();
+}
+
+void tecla_no_numerica(){
+  escribir_texto(0, 0, "ERROR", 1);
+  escribir_texto(0, 10, "La tecla pulsada no es numerica", 1);
 
 }
