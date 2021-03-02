@@ -62,6 +62,7 @@ void ver_fecha();
 void opcion_sensado();
 void escribir_texto();
 void tecla_no_numerica();
+void sensado();
  
 // Objeto de la clase Adafruit_SSD1306 y del RTC
 Adafruit_SSD1306 display(ANCHO_PANTALLA, ALTO_PANTALLA, &Wire, -1);//&Wire es un puntero de la clase estática Wire. -1 es el pin de Arduino o ESP8266 que se utiliza para resetear la pantalla en caso de que la pantalla tenga un pin RST (no es nuestro caso)
@@ -495,5 +496,8 @@ void escribir_texto(byte x_pos, byte y_pos, char *text, byte text_size){
 void tecla_no_numerica(){
   escribir_texto(0, 0, "ERROR", 1);
   escribir_texto(0, 10, "La tecla pulsada no es numerica", 1);
+
+}
+void sensado(){
 
 }
