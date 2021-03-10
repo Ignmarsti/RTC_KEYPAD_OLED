@@ -1,6 +1,3 @@
-#include "SDHT.h"
-
-
 
 #include <Keypad.h>
 #include <SPI.h>
@@ -8,7 +5,7 @@
 #include <Adafruit_GFX.h>//Librería gráfica para la pantalla OLED
 #include <Adafruit_SSD1306.h>//Librería necesaria para laspantallas OLED
 #include "RTClib.h"
-#include "SDHT.h"
+//#include "SDHT.h"
 
 // Definimos constantes
 #define ANCHO_PANTALLA 128 // ancho pantalla OLED. Valor típico 128
@@ -49,8 +46,21 @@ int i=0;
 int tecla_numerica;
 int tecla_anterior;
 char opcion_seleccionada;
-bool bandera;
 bool bandera_seleccion=0;
+bool bandera_riego=0;
+
+int horariego1_0;
+int horariego1_1;
+int horariego1_3;
+int horariego1_4;
+int horariego2_0;
+int horariego2_1;
+int horariego2_3;
+int horariego2_4;
+int horariego3_0;
+int horariego3_1;
+int horariego3_3;
+int horariego3_4;
 
 
 void menu_principal();
@@ -58,23 +68,24 @@ void opcion_a();
 void opcion_b();
 void opcion_c();
 void error_numerico();
+void recuperar_fecha();
 void ver_fecha();
 void opcion_sensado();
 void escribir_texto();
 void tecla_no_numerica();
-void sensado();
  
 // Objeto de la clase Adafruit_SSD1306 y del RTC
 Adafruit_SSD1306 display(ANCHO_PANTALLA, ALTO_PANTALLA, &Wire, -1);//&Wire es un puntero de la clase estática Wire. -1 es el pin de Arduino o ESP8266 que se utiliza para resetear la pantalla en caso de que la pantalla tenga un pin RST (no es nuestro caso)
 Keypad teclado = Keypad(makeKeymap(teclas), pinesFilas, pinesColumnas, filas, columnas); ///Crea el mapa del teclado 
 RTC_DS1307 rtc;
 DateTime hoy;
-SDHT dht;
+//SDHT dht;
  
 void setup() {
   
   
   bandera_seleccion=0;//Bajamos la bandera de selección
+  bandera_riego=0;
   display.begin(SSD1306_SWITCHCAPVCC, 0x3C);//Iniciamos la pantalla OLED que se encuentra en la dirección 0x3C
   Wire.begin();
   rtc.begin();
@@ -83,7 +94,8 @@ void setup() {
 
   rtc.adjust(DateTime(__DATE__, __TIME__));///ESTA LINEA SE TIENE QUE COMENTAR NADA MAS SE CARGUE UNA VEZ, Y VOLVER A CARGAR EL SKECTH PARA QUE DE ESTA MANERA SOLO SE PONGA EN HORA UNA VEZ A TRAVÉS DEL ORDENADOR
   //rtc.adjust(DateTime(2021, 02, 17, 19, 44, 00));
-  
+
+
   menu_principal();
 
  
@@ -91,11 +103,13 @@ void setup() {
  
 void loop() {
     
-    dht.read(TipoSensor, pinsensorT);
+//    dht.read(TipoSensor, pinsensorT);
     
     V = analogRead(ldr_pin); 
-    
-    
+
+    hora_de_regar();
+    recuperar_fecha();
+
     //t = dht.readTemperature();////En grados celsius por defecto
     hoy = rtc.now();///Recuperamos la fecha actual
     tecla_pulsada = teclado.getKey();//Comprobamos que tecla se ha pulsado
@@ -354,11 +368,7 @@ void opcion_c(){
 void menu_principal(){
 
   i=0;
-  digitalWrite(LED_BUILTIN, HIGH);   // turn the LED on (HIGH is the voltage level)
-  delay(1000);                       // wait for a second
-  digitalWrite(LED_BUILTIN, LOW);    // turn the LED off by making the voltage LOW
-  delay(1000);
-
+ 
     // Limpiar buffer
   display.clearDisplay();
  
@@ -383,7 +393,7 @@ void error_numerico(){
   delay(2000);
 }
 
-void ver_fecha(){
+void recuperar_fecha(){
   
   hoy = rtc.now();///Recuperamos la fecha actual
   
@@ -414,39 +424,60 @@ void ver_fecha(){
   calendario[3] = mes / 10 + 48;
   calendario[1] = dia % 10 + 48;
   calendario[0] = dia / 10 + 48;
+}
 
-  
+void ver_fecha(){
+    
   display.clearDisplay();
   escribir_texto(0, 0, fecha, 1);
   escribir_texto(60, 0, calendario, 1);
+  escribir_texto(0,30, "Hora:",1);
+  display.print(horariego1_0);
+  display.print(horariego1_1);
+  display.print(':');
+  display.print(horariego1_3);
+  display.print((minuto % 10)+1);
+  display.display();
   delay(2000);
   menu_principal();
+  
 }
 
 void hora_de_regar(){
   ///A pesar de que cuando introducimos manualmente la hora de riego se piden la hora, los minutos y los segundos, en esta parte del código nos fijaremos solo en la hora y los minutos
   ///De esta manera si por casualidad estamos tocando el keypad justo a la hora de riego y nos encontramos con un delay, no perderemos el riego, si no que regaremos una vez pase el delay
   ///Y levantaremos una bandera para que solo se riegue una sola vez.
-  int horariego1_0 = horariego1[0] - '0';
-  int horariego1_1 = horariego1[1] - '0';
-  int horariego1_3 = horariego1[3] - '0';
-  int horariego1_4 = horariego1[4] - '0';
-  int horariego2_0 = horariego1[0] - '0';
-  int horariego2_1 = horariego1[1] - '0';
-  int horariego2_3 = horariego1[3] - '0';
-  int horariego2_4 = horariego1[4] - '0';
-  int horariego3_0 = horariego1[0] - '0';
-  int horariego3_1 = horariego1[1] - '0';
-  int horariego3_3 = horariego1[3] - '0';
-  int horariego3_4 = horariego1[4] - '0';
+  
+  horariego1_0 = horariego1[0] - '0';
+  horariego1_1 = horariego1[1] - '0';
+  horariego1_3 = horariego1[2] - '0';
+  horariego1_4 = horariego1[3] - '0';
+  horariego2_0 = horariego2[0] - '0';
+  horariego2_1 = horariego2[1] - '0';
+  horariego2_3 = horariego2[2] - '0';
+  horariego2_4 = horariego2[3] - '0';
+  horariego3_0 = horariego3[0] - '0';
+  horariego3_1 = horariego3[1] - '0';
+  horariego3_3 = horariego3[2] - '0';
+  horariego3_4 = horariego3[3] - '0';
+  
 
-  if(horariego1_0==fecha[0]&&horariego1_1==fecha[1]&&horariego1_3==fecha[3]&&horariego1_4==fecha[4]){
+  if((horariego1_0==hora/10 && horariego1_1==hora%10 && horariego1_3==minuto/10 && horariego1_4==minuto%10)&&bandera_riego==0){
+    /////ENCENDEMOS LA BOMBA DURANTE 10 segundos////////
+    bandera_riego=1;
+    digitalWrite(LED_BUILTIN, HIGH);   // turn the LED on (HIGH is the voltage level)
+    delay(5000);                       // wait for a second
+    digitalWrite(LED_BUILTIN, LOW);    // turn the LED off by making the voltage LOW
+    delay(5000);
+  }
+
+//////////-----------------------------AQUI TENDRA QUE IR ALGUN METODO QUE BAJE LA BANDERA CUANDO HAYA PASADO UN MINUTO DESDE LA HORA DE RIEGO PARA NO ESTAR REGANDO EL MINUTO ENTERO-----------////////////
+/////////------------------------------DEBERIA INTENTAR USAR LA FUNCION MILLIS PARA ESTO Y PARA EL RESTO DE TAREAS-------------------------////////////////
+
+  if(horariego2_0==hora/10 && horariego2_1==hora%10 && horariego2_3==minuto/10 && horariego2_4==minuto%10)&&bandera_riego==0){
     /////ENCENDEMOS LA BOMBA DURANTE 10 segundos////////
   }
-  if(horariego2_0==fecha[0]&&horariego2_1==fecha[1]&&horariego2_3==fecha[3]&&horariego2_4==fecha[4]){
-    /////ENCENDEMOS LA BOMBA DURANTE 10 segundos////////
-  }
-  if(horariego3_0==fecha[0]&&horariego3_1==fecha[1]&&horariego3_3==fecha[3]&&horariego3_4==fecha[4]){
+  if(horariego3_0==hora/10 && horariego3_1==hora%10 && horariego3_3==minuto/10 && horariego3_4==minuto%10)&&bandera_riego==0){
     /////ENCENDEMOS LA BOMBA DURANTE 10 segundos////////
   }
   
@@ -455,29 +486,33 @@ void hora_de_regar(){
 void opcion_sensado(){
   if(bandera_seleccion==1){
 
-      float humedad=dht.humidity;
+      /*float humedad=dht.humidity;
       int hum=humedad*10;
       float temperatura=dht.celsius;
       int temp=temperatura*10;
       
       
-      display.clearDisplay();
-      escribir_texto(0, 0, "La temperatura es:", 1);
+      
+      escribir_texto(0, 0, "Temperatura:", 1);
       display.print(temp/100);
-      display.print(",");
-      display.println(temp%100);
+      //display.print(",");
+      //display.print(temp%100);
       display.display();
       
-      escribir_texto(0, 13, "La humedad es:", 1);
+      /*escribir_texto(0, 15, "Humedad:", 1);
       display.print(hum/100);
       display.print(",");
       display.println(hum%100);
-      display.display();
-
-     /* ilum = ((long)V*A*10)/((long)B*Rc*(1024-V));
-      escribir_texto(0, 0, "La cantidad de luz es: ", 1);
-      display.println(ilum);
       display.display();*/
+
+      display.clearDisplay();
+
+      ilum = ((long)V*A*10)/((long)B*Rc*(1024-V));
+      
+      escribir_texto(0, 30, "La cantidad de luz es: ", 1);
+      display.print(ilum);////Cuando la luz es muy brillante, entonces la resistencia de la fotocélula es muy baja en comparación con la resistencia de valor fijo
+                          ////Cuando la fotocélula está en una luz apagada, la resistencia es mayor que la resistencia fija de 1 kΩ
+      display.display();
       
       delay(2000);
       bandera_seleccion=0;
@@ -498,8 +533,6 @@ void tecla_no_numerica(){
   escribir_texto(0, 10, "La tecla pulsada no es numerica", 1);
 
 }
-void sensado(){
 
-}
-///HOLA///
-////////SEGUNDA PRUEBA CREAR NUEVA RAMA ///////////////
+
+
